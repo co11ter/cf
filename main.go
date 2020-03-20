@@ -10,6 +10,48 @@ import (
 	"github.com/centrifugal/centrifuge-go"
 )
 
+
+var (
+	cfgu string
+	cfgc string
+	help bool
+)
+
+func init() {
+	flag.StringVar(&cfgu, "u", "ws://127.0.0.1:8000/connection/websocket","url for centrifugo")
+	flag.StringVar(&cfgc, "c", "channel","channel name")
+	flag.BoolVar(&help, "help", false, "print help")
+}
+
+func main() {
+	flag.Parse()
+
+	if help {
+		flag.Usage()
+		return
+	}
+
+	fmt.Println("url:", cfgu)
+	fmt.Println("channel:", cfgc)
+
+	centconf := centrifuge.DefaultConfig()
+	centconf.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+
+	cf := centrifuge.New(cfgu, centconf)
+	if err := NewWSClient(cf).Run(cfgc); err != nil {
+		panic(err)
+	}
+
+	if err := cf.Connect(); err != nil {
+		panic(err)
+	}
+	defer cf.Close()
+
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt, os.Kill)
+	<-interrupt
+}
+
 type WSClient struct {
 	client *centrifuge.Client
 }
@@ -39,38 +81,4 @@ func (l *WSClient) OnPublish(sub *centrifuge.Subscription, event centrifuge.Publ
 
 func (l *WSClient) OnError(client *centrifuge.Client, event centrifuge.ErrorEvent) {
 	panic(fmt.Errorf(event.Message))
-}
-
-func main() {
-	var u = flag.String(
-		"u",
-		"ws://127.0.0.1:8000/connection/websocket",
-		"url for centrifugo",
-	)
-
-	var c = flag.String(
-		"c",
-		"channel",
-		"channel name",
-	)
-
-	fmt.Println("url:", *u)
-	fmt.Println("channel:", *c)
-
-	centconf := centrifuge.DefaultConfig()
-	centconf.TLSConfig = &tls.Config{InsecureSkipVerify: true}
-
-	cf := centrifuge.New(*u, centconf)
-	if err := NewWSClient(cf).Run(*c); err != nil {
-		panic(err)
-	}
-
-	if err := cf.Connect(); err != nil {
-		panic(err)
-	}
-	defer cf.Close()
-
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt, os.Kill)
-	<-interrupt
 }
